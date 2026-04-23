@@ -38,7 +38,7 @@ async function postScore(url: string, fd: FormData): Promise<Response> {
 
 export async function scoreResume(fd: FormData): Promise<ScoreResponse> {
   // Primary: same-origin (works when UI is served by FastAPI or Vite dev/preview proxy).
-  const primaryUrl = `${base}/api/score`;
+  const primaryUrl = `${base()}/api/score`;
 
   const tryUrls = async (urls: string[]): Promise<Response> => {
     let last: Response | null = null;
@@ -64,7 +64,7 @@ export async function scoreResume(fd: FormData): Promise<ScoreResponse> {
   // If POST /api/* hits a static server, it often returns 405.
   // In local dev (no VITE_API_BASE), retry known localhost backends. In production, only use the configured base.
   const candidates =
-    base === ""
+    base() === ""
       ? [
           primaryUrl,
           "http://localhost:8000/api/score",
