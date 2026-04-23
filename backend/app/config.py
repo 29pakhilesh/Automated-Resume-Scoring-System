@@ -20,18 +20,10 @@ def _default_sqlite_url() -> str:
 class Settings:
     database_url: str
     embedding_model: str
-    enable_openai_coach: bool
-    openai_api_key: str | None
-    openai_base_url: str
-    openai_model: str
     llm_max_tokens: int
     # Scoring run persistence (see app/scoring_privacy.py)
     persist_scoring_runs: bool
     store_scoring_sensitive_content_in_db: bool
-
-    @property
-    def llm_enabled(self) -> bool:
-        return bool(self.enable_openai_coach and self.openai_api_key)
 
 
 def _truthy(name: str, default: str = "false") -> bool:
@@ -47,10 +39,6 @@ def get_settings() -> Settings:
             "all-MiniLM-L6-v2",
         )
         or "all-MiniLM-L6-v2",
-        enable_openai_coach=_truthy("ENABLE_OPENAI_COACH", "false"),
-        openai_api_key=_env("OPENAI_API_KEY"),
-        openai_base_url=_env("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/"),
-        openai_model=_env("OPENAI_MODEL", "gpt-4o-mini"),
         llm_max_tokens=int(_env("LLM_MAX_TOKENS", "700") or "700"),
         # Off by default: no scoring history in DB until explicitly enabled (e.g. local analytics).
         persist_scoring_runs=_truthy("PERSIST_SCORING_RUNS", "false"),

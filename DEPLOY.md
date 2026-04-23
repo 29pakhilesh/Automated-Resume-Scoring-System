@@ -22,8 +22,6 @@ Optional environment variables (Render → Environment):
 
 | Variable | Purpose |
 |----------|---------|
-| `OPENAI_API_KEY` | Enables remote coach when `ENABLE_OPENAI_COACH=true` |
-| `ENABLE_OPENAI_COACH` | `true` / `false` |
 | `PERSIST_SCORING_RUNS` | `true` to store run history in SQLite on disk |
 | `DATABASE_URL` | Override SQLite (e.g. managed Postgres URL) |
 

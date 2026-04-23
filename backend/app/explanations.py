@@ -1,13 +1,8 @@
-"""Structured 'why' explanations + optional OpenAI-compatible LLM coach."""
+"""Structured 'why' explanations for scoring (Python-only; no remote LLM)."""
 
 from __future__ import annotations
 
-import json
 from typing import Any
-
-import httpx
-
-from app.config import Settings
 
 
 def build_improvement_plan(
@@ -72,46 +67,3 @@ def build_improvement_plan(
 
     return plan[:8]
 
-
-COACH_SYSTEM = """You are an expert technical resume coach.
-You MUST be concrete and non-hallucinatory: only reference facts present in the JSON context.
-Output 6-10 short bullet points: what to improve, why it likely lowered scores, and a specific rewrite suggestion.
-No flattery. No legal/medical claims."""
-
-
-async def openai_coach_explanation(
-    *,
-    settings: Settings,
-    context: dict[str, Any],
-) -> dict[str, Any] | None:
-    """Optional OpenAI-compatible chat completion (remote). Off by default; backend remains Python-only."""
-    if not settings.llm_enabled:
-        return None
-
-    payload = {
-        "model": settings.openai_model,
-        "temperature": 0.35,
-        "max_tokens": settings.llm_max_tokens,
-        "messages": [
-            {"role": "system", "content": COACH_SYSTEM},
-            {
-                "role": "user",
-                "content": "Context JSON:\n" + json.dumps(context, ensure_ascii=False)[:18_000],
-            },
-        ],
-    }
-
-    url = f"{settings.openai_base_url}/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {settings.openai_api_key}",
-        "Content-Type": "application/json",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(url, headers=headers, json=payload)
-            r.raise_for_status()
-            data = r.json()
-        text = data["choices"][0]["message"]["content"]
-        return {"provider": "openai_compatible", "model": settings.openai_model, "text": text.strip()}
-    except Exception as exc:  # noqa: BLE001
-        return {"provider": "openai_compatible", "model": settings.openai_model, "error": str(exc)[:500]}

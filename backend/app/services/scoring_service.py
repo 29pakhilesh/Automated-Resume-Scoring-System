@@ -10,7 +10,6 @@ from app.coach_python import build_python_coach
 from app.config import get_settings
 from app.db.crud import save_scoring_run
 from app.db.session import get_session_factory
-from app.explanations import openai_coach_explanation
 from app.scoring import score_resume
 from app.scoring_privacy import scoring_run_payload_for_db
 
@@ -27,7 +26,6 @@ async def score_resume_pipeline(
     End-to-end scoring used by the API:
     - CPU-heavy scoring in a worker thread
     - Always attaches a **Python-only** coach narrative
-    - Optionally attaches a remote coach if explicitly enabled in settings
     - Persistence: uploads are never written to disk. DB rows are off by default
       (`PERSIST_SCORING_RUNS=false`). When persistence is on, `STORE_SCORING_SENSITIVE_CONTENT_IN_DB`
       defaults to false so JD excerpts, upload filenames, and full payloads are not stored.
@@ -52,17 +50,6 @@ async def score_resume_pipeline(
     }
 
     result["ai_coach"] = build_python_coach(coach_ctx)
-
-    if settings.enable_openai_coach and settings.openai_api_key:
-        remote = await openai_coach_explanation(settings=settings, context=coach_ctx)
-        if remote and remote.get("text"):
-            result["ai_coach_remote"] = {
-                "provider": remote.get("provider"),
-                "model": remote.get("model"),
-                "text": remote["text"],
-            }
-        elif remote and remote.get("error"):
-            result["ai_coach_remote"] = {"error": remote.get("error"), "model": remote.get("model")}
 
     if settings.persist_scoring_runs:
         jd_excerpt = (
