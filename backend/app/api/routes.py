@@ -1,3 +1,6 @@
+import logging
+import time
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.dataset import load_job_archetypes
@@ -9,6 +12,8 @@ from app.services.scoring_service import score_resume_pipeline
 router = APIRouter(prefix="/api")
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+log = logging.getLogger("rss.api")
 
 
 @router.get("/health")
@@ -54,6 +59,7 @@ async def score_endpoint(
     job_description: str = Form(...),
     position_title: str = Form(...),
 ) -> dict:
+    t0 = time.monotonic()
     if not position_title or not position_title.strip():
         raise HTTPException(status_code=400, detail="position_title is required")
     if not job_description or len(job_description.strip()) < 40:
@@ -70,20 +76,27 @@ async def score_endpoint(
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=400, detail="File too large (max 5 MB)")
 
+    log.info("score:start filename=%r bytes=%d title=%r", name, len(data), position_title.strip()[:120])
     try:
         text = extract_resume_text(name, data)
     except Exception as exc:  # noqa: BLE001
+        log.info("score:extract_failed filename=%r err=%r", name, str(exc)[:200])
         raise HTTPException(status_code=422, detail=f"Could not read resume: {exc}") from exc
 
     if not text or len(text.strip()) < 50:
+        log.info("score:too_little_text filename=%r extracted_len=%d", name, len((text or "").strip()))
         raise HTTPException(
             status_code=422,
             detail="Very little text extracted. Try another PDF (text-based, not only scanned images) or DOCX.",
         )
 
-    return await score_resume_pipeline(
-        resume_text=text,
-        job_description=job_description,
-        position_title=position_title,
-        filename=name,
-    )
+    try:
+        out = await score_resume_pipeline(
+            resume_text=text,
+            job_description=job_description,
+            position_title=position_title,
+            filename=name,
+        )
+        return out
+    finally:
+        log.info("score:done filename=%r ms=%.0f", name, (time.monotonic() - t0) * 1000)
