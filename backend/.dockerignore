@@ -1,0 +1,15 @@
+__pycache__
+*.py[cod]
+.venv
+venv
+.env
+*.egg-info
+.git
+.gitignore
+Dockerfile
+.dockerignore
+data/hf_home
+data/hf_datasets_cache
+data/kagglehub_cache
+data/*.db
+*.md

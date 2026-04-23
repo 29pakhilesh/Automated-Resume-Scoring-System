@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.egg-info/
+.DS_Store
+
+# Backend (Python)
+backend/data/rss.db
+backend/data/hf_home/
+backend/data/hf_datasets_cache/
+backend/data/kagglehub_cache/
+backend/**/__pycache__/
+
+# Frontend (Node / Vite)
+frontend/node_modules/
+frontend/dist/

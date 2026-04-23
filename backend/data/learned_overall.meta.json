@@ -1,0 +1,26 @@
+{
+  "training_rows": 19,
+  "mae_train": 0.149,
+  "mae_test": 4.286,
+  "feature_count": 17,
+  "feature_names": [
+    "format",
+    "semantic",
+    "keyword",
+    "heuristic_overall",
+    "log1p_word_count",
+    "log1p_jd_terms",
+    "token_match_ratio",
+    "embedding_blend",
+    "chunk_cos_mean",
+    "chunk_cos_min",
+    "lexical_blend",
+    "tfidf_cos",
+    "unigram_cos",
+    "char_trigram_cos",
+    "log1p_bm25_raw",
+    "bm25_norm",
+    "overlap_norm"
+  ],
+  "n_features": 17
+}
