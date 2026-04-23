@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { ArrowRight, FileText, UploadCloud } from "lucide-react";
@@ -13,6 +13,7 @@ type Props = {
   file: File | null;
   onFileChange: (f: File | null) => void;
   loading: boolean;
+  progress?: { pct?: number; message?: string; step?: string } | null;
   onSubmit: () => void;
 };
 
@@ -24,10 +25,29 @@ export function ScoreFormCard({
   file,
   onFileChange,
   loading,
+  progress,
   onSubmit,
 }: Props) {
   const inputId = useId();
   const [dragOver, setDragOver] = useState(false);
+
+  const progressPct = progress?.pct ?? 0;
+
+  const steps = useMemo(
+    () => [
+      { step: "upload_received", label: "Upload received" },
+      { step: "extracting_text", label: "Extracting text" },
+      { step: "scoring", label: "Scoring" },
+      { step: "finalizing", label: "Finalizing" },
+    ],
+    [],
+  );
+
+  const activeLabel = progress?.message?.trim()
+    ? progress.message
+    : loading
+      ? "Working…"
+      : "";
 
   const pickFile = useCallback(
     (f: File | null) => {
@@ -164,6 +184,48 @@ export function ScoreFormCard({
             <span className="absolute inset-0 bg-white/10 animate-shimmer" aria-hidden />
           )}
         </motion.button>
+
+        {loading && (
+          <div className="pt-3">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <p className="font-semibold text-ink-800 dark:text-ink-200">{activeLabel}</p>
+              <p className="tabular-nums text-ink-600 dark:text-ink-500">
+                {progressPct ? `${Math.round(progressPct)}%` : ""}
+              </p>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-sky-500 to-blue-600"
+                initial={{ width: "0%" }}
+                animate={{ width: `${Math.min(99, Math.max(3, progressPct || 3))}%` }}
+                transition={{ type: "spring", stiffness: 120, damping: 18 }}
+              />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-ink-600 dark:text-ink-500">
+              {steps.map((s) => (
+                <div key={s.step} className="flex items-center gap-2">
+                  <span
+                    className={clsx(
+                      "h-1.5 w-1.5 rounded-full",
+                      progress?.step === s.step || (progressPct && progressPct >= 95 && s.step === "finalizing")
+                        ? "bg-ink-900 dark:bg-white"
+                        : progressPct && progressPct > 0
+                          ? "bg-black/30 dark:bg-white/30"
+                          : "bg-black/20 dark:bg-white/20",
+                    )}
+                  />
+                  <span
+                    className={clsx(
+                      progress?.step === s.step && "text-ink-900 dark:text-ink-200",
+                    )}
+                  >
+                    {s.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <p className="text-center text-xs text-ink-600 dark:text-ink-500">Tip: PDFs and DOCX are supported.</p>
       </form>

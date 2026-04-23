@@ -7,7 +7,7 @@ import { RecentRunsBar } from "@/components/RecentRunsBar";
 import { ScoreFormCard } from "@/components/ScoreFormCard";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { DetailsPage } from "@/components/DetailsPage";
-import { fetchArchetypes, fetchRecentRuns, scoreResume } from "@/api";
+import { fetchArchetypes, fetchRecentRuns, startScoreJob, streamScoreJob } from "@/api";
 import type { ArchetypeItem, RunItem, ScoreResponse } from "@/types";
 import { applyTheme, getInitialTheme, type Theme } from "@/theme";
 import logoPng from "@/assets/logo.jpeg";
@@ -26,6 +26,7 @@ export default function App() {
   const [result, setResult] = useState<ScoreResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<{ pct?: number; message?: string; step?: string } | null>(null);
 
   const resultsAnchor = useRef<HTMLDivElement>(null);
   const scoreSectionRef = useRef<HTMLDivElement>(null);
@@ -102,6 +103,7 @@ export default function App() {
     }
     setLoading(true);
     setResult(null);
+    setProgress({ pct: 1, message: "Starting…", step: "connected" });
 
     const fd = new FormData();
     fd.append("position_title", positionTitle.trim());
@@ -109,17 +111,32 @@ export default function App() {
     fd.append("file", file, file.name);
 
     try {
-      const data = await scoreResume(fd);
-      setResult(data);
-      try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      } catch {
-        // ignore
-      }
-      void refreshRuns();
-      requestAnimationFrame(() => {
-        resultsAnchor.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      const { job_id } = await startScoreJob(fd);
+      const stop = streamScoreJob(job_id, {
+        onProgress: (p) => setProgress({ pct: p.pct, message: p.message, step: p.step }),
+        onResult: (data) => {
+          stop();
+          setResult(data);
+          setProgress({ pct: 100, message: "Done", step: "done" });
+          try {
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          } catch {
+            // ignore
+          }
+          void refreshRuns();
+          requestAnimationFrame(() => {
+            resultsAnchor.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          });
+        },
+        onError: (message) => {
+          stop();
+          setError(message);
+        },
       });
+      // If the browser navigates away, close the SSE connection.
+      window.addEventListener("beforeunload", stop, { once: true });
+      // `setLoading(false)` happens in finally.
+      return;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -369,6 +386,7 @@ export default function App() {
                       file={file}
                       onFileChange={setFile}
                       loading={loading}
+                  progress={progress}
                       onSubmit={handleSubmit}
                     />
                   </motion.div>

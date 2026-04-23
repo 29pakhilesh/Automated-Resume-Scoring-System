@@ -27,7 +27,8 @@ app = FastAPI(title="Resume Scoring System", version="0.4.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    # We don't use cookies/auth headers; disabling credentials avoids edge-case browser CORS blocks.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

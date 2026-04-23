@@ -1,12 +1,15 @@
 import logging
 import time
+import json
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 
 from app.dataset import load_job_archetypes
 from app.db.queries import list_recent_runs
 from app.db.session import get_session_factory
 from app.parsers import extract_resume_text
+from app.services.scoring_jobs import JOB_MANAGER
 from app.services.scoring_service import score_resume_pipeline
 
 router = APIRouter(prefix="/api")
@@ -14,6 +17,9 @@ router = APIRouter(prefix="/api")
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
 log = logging.getLogger("rss.api")
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 @router.get("/health")
@@ -100,3 +106,97 @@ async def score_endpoint(
         return out
     finally:
         log.info("score:done filename=%r ms=%.0f", name, (time.monotonic() - t0) * 1000)
+
+
+@router.post("/score_async")
+async def score_async_start(
+    file: UploadFile = File(...),
+    job_description: str = Form(...),
+    position_title: str = Form(...),
+) -> dict:
+    """
+    Starts a scoring job and returns a job id.
+    Progress is streamed over SSE from GET /api/score_events/{job_id}.
+    Upload bytes and extracted text are kept in memory only for the duration of the job.
+    """
+    if not position_title or not position_title.strip():
+        raise HTTPException(status_code=400, detail="position_title is required")
+    if not job_description or len(job_description.strip()) < 40:
+        raise HTTPException(
+            status_code=400,
+            detail="job_description should be at least 40 characters for meaningful scoring",
+        )
+
+    name = file.filename or ""
+    if not (name.lower().endswith(".pdf") or name.lower().endswith(".docx")):
+        raise HTTPException(status_code=400, detail="Upload a PDF or DOCX file")
+
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (max 5 MB)")
+
+    job = await JOB_MANAGER.create()
+    await JOB_MANAGER.append(job.id, "progress", {"step": "upload_received", "message": "Upload received", "pct": 5})
+
+    async def _run() -> None:
+        t0 = time.monotonic()
+        try:
+            await JOB_MANAGER.append(job.id, "progress", {"step": "extracting_text", "message": "Extracting text", "pct": 18})
+            text = extract_resume_text(name, data)
+            if not text or len(text.strip()) < 50:
+                raise ValueError(
+                    "Very little text extracted. Try another PDF (text-based, not only scanned images) or DOCX."
+                )
+
+            await JOB_MANAGER.append(job.id, "progress", {"step": "scoring", "message": "Scoring and matching to job description", "pct": 55})
+            out = await score_resume_pipeline(
+                resume_text=text,
+                job_description=job_description,
+                position_title=position_title,
+                filename=name,
+            )
+            await JOB_MANAGER.append(job.id, "progress", {"step": "finalizing", "message": "Finalizing results", "pct": 95})
+            await JOB_MANAGER.append(
+                job.id,
+                "result",
+                {"result": out, "ms": int((time.monotonic() - t0) * 1000)},
+            )
+        except Exception as exc:  # noqa: BLE001
+            await JOB_MANAGER.append(job.id, "error", {"message": str(exc)[:600]})
+
+    # Fire-and-forget background job
+    import asyncio as _asyncio
+
+    _asyncio.create_task(_run())
+    return {"job_id": job.id}
+
+
+@router.get("/score_events/{job_id}")
+async def score_events(job_id: str):
+    """Server-Sent Events stream for a scoring job."""
+
+    async def gen():
+        last_idx = 0
+        # Initial ping so EventSource opens reliably behind proxies.
+        yield _sse("progress", {"step": "connected", "message": "Connected", "pct": 1})
+        while True:
+            job = await JOB_MANAGER.get(job_id)
+            if job is None:
+                yield _sse("error", {"message": "Job not found (expired). Please try again."})
+                return
+
+            # Stream any new events
+            events = job.events
+            while last_idx < len(events):
+                ev = events[last_idx]
+                last_idx += 1
+                yield _sse(ev.type, ev.data)
+                if ev.type in {"result", "error"}:
+                    return
+
+            # Keep-alive
+            await asyncio.sleep(0.25)
+
+    import asyncio
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
