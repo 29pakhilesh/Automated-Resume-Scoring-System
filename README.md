@@ -38,13 +38,49 @@ Resume Scoring System scores a resume against a specific job description, not ag
 
 These are the data sources and artifacts used by the project for presets, benchmarking, and local learned scoring assets.
 
-| Icon | Dataset / Artifact | Used for | Location |
-|---|---|---|---|
-| <img alt="Hugging Face" src="https://img.shields.io/badge/Hugging_Face-0xnbk%2Fresume--ats--score--v1--en-FFD21E?logo=huggingface&logoColor=000" /> | `0xnbk/resume-ats-score-v1-en` | Optional resume ATS benchmark with `text`, `ats_score`, and `original_label` columns | `backend/app/dataset_hf.py` |
-| <img alt="Kaggle" src="https://img.shields.io/badge/Kaggle-Jobsphere_ATS_Resume_Scoring-20BEFF?logo=kaggle&logoColor=white" /> | `mohamedramadan2040/jobsphere-ats-resume-scoring` | Optional DOCX/PDF resume corpus for smoke and score distribution checks | `backend/app/dataset_kaggle.py` |
-| <img alt="JSONL" src="https://img.shields.io/badge/JSONL-JD_Archetypes-F97316?logo=json&logoColor=white" /> | `jd_archetypes.jsonl` | Local job-description presets shown in the UI | `backend/data/jd_archetypes.jsonl` |
-| <img alt="DOCX" src="https://img.shields.io/badge/DOCX-Reference_Resume-2B579A?logo=microsoftword&logoColor=white" /> | `reference_resume.docx` | Local reference resume artifact for formatting/parsing experiments | `backend/data/reference_resume.docx` |
-| <img alt="Joblib" src="https://img.shields.io/badge/Joblib-Learned_Model-4B5563?logo=python&logoColor=white" /> | `learned_overall.joblib` + metadata | Local learned overall-score calibration artifact | `backend/data/learned_overall.joblib` |
+<table>
+  <tr>
+    <td width="130" align="center"><strong>HF</strong><br />Hugging Face</td>
+    <td>
+      <strong><code>0xnbk/resume-ats-score-v1-en</code></strong><br />
+      Optional resume ATS benchmark with <code>text</code>, <code>ats_score</code>, and
+      <code>original_label</code> columns.<br />
+      <sub>Helper: <code>backend/app/dataset_hf.py</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="130" align="center"><strong>KG</strong><br />Kaggle</td>
+    <td>
+      <strong><code>mohamedramadan2040/jobsphere-ats-resume-scoring</code></strong><br />
+      Optional DOCX/PDF resume corpus for smoke and score distribution checks.<br />
+      <sub>Helper: <code>backend/app/dataset_kaggle.py</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="130" align="center"><strong>JSONL</strong><br />JD Presets</td>
+    <td>
+      <strong><code>jd_archetypes.jsonl</code></strong><br />
+      Local job-description presets shown in the UI.<br />
+      <sub>Data: <code>backend/data/jd_archetypes.jsonl</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="130" align="center"><strong>DOCX</strong><br />Reference</td>
+    <td>
+      <strong><code>reference_resume.docx</code></strong><br />
+      Local reference resume artifact for formatting and parsing experiments.<br />
+      <sub>Data: <code>backend/data/reference_resume.docx</code></sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="130" align="center"><strong>PKL</strong><br />Joblib</td>
+    <td>
+      <strong><code>learned_overall.joblib</code> + metadata</strong><br />
+      Local learned overall-score calibration artifact.<br />
+      <sub>Data: <code>backend/data/learned_overall.joblib</code></sub>
+    </td>
+  </tr>
+</table>
 
 ## How Scoring Works
 
@@ -76,6 +112,51 @@ The score channels are:
 | Format and structure | Headings, scanability, section coverage, skills grouping, and resume organization |
 | Semantic fit | Meaning overlap between resume text and the job description using transformer embeddings |
 | Keyword fit | Important JD term coverage and BM25-style lexical relevance |
+
+## Scoring Equations
+
+The app reports three normalized subscores on a 0-100 scale:
+
+```text
+F = format_score
+S = semantic_score
+K = keyword_score
+```
+
+The final score is a weighted mean:
+
+```text
+overall_score = (wf * F + ws * S + wk * K) / (wf + ws + wk)
+```
+
+Default weights:
+
+```text
+wf = 0.18
+ws = 0.50
+wk = 0.32
+```
+
+So the default calculation is:
+
+```text
+overall_score = (0.18 * F + 0.50 * S + 0.32 * K) / 1.00
+```
+
+Core similarity signals use standard normalized matching ideas:
+
+```text
+cosine_similarity(A, B) = (A . B) / (||A|| * ||B||)
+keyword_coverage      = matched_important_terms / total_important_terms
+```
+
+BM25-style lexical relevance follows the usual term-frequency saturation pattern:
+
+```text
+BM25(q, d) = sum IDF(t) * ((tf(t,d) * (k1 + 1)) / (tf(t,d) + k1 * (1 - b + b * |d| / avgdl)))
+```
+
+These raw signals are clipped and normalized before they are exposed as the 0-100 score channels.
 
 ## Tech Stack
 
@@ -274,4 +355,3 @@ make clean
 ## Why Scores Can Surprise You
 
 A strong resume can still score low if it does not match the specific job description. This is intentional. The app rewards evidence that the resume mirrors the target role: relevant tools, domains, responsibilities, seniority signals, and outcomes. Use the weak-section output as the first rewrite queue.
-
