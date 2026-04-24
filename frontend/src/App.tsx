@@ -112,31 +112,20 @@ export default function App() {
 
     try {
       const { job_id } = await startScoreJob(fd);
-      const stop = streamScoreJob(job_id, {
-        onProgress: (p) => setProgress({ pct: p.pct, message: p.message, step: p.step }),
-        onResult: (data) => {
-          stop();
-          setResult(data);
-          setProgress({ pct: 100, message: "Done", step: "done" });
-          try {
-            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-          } catch {
-            // ignore
-          }
-          void refreshRuns();
-          requestAnimationFrame(() => {
-            resultsAnchor.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-          });
-        },
-        onError: (message) => {
-          stop();
-          setError(message);
-        },
+      const data = await streamScoreJob(job_id, (p) =>
+        setProgress({ pct: p.pct, message: p.message, step: p.step }),
+      );
+      setResult(data);
+      setProgress({ pct: 100, message: "Done", step: "done" });
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch {
+        // ignore
+      }
+      void refreshRuns();
+      requestAnimationFrame(() => {
+        resultsAnchor.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       });
-      // If the browser navigates away, close the SSE connection.
-      window.addEventListener("beforeunload", stop, { once: true });
-      // `setLoading(false)` happens in finally.
-      return;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {

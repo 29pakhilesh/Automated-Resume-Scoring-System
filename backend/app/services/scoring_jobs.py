@@ -58,7 +58,7 @@ class ScoringJobManager:
             if not job:
                 return
             job.emit(type, data)
-            if type in {"result", "error"}:
+            if type in {"result", "joberror"}:
                 job.done = True
 
     def _gc_locked(self) -> None:

@@ -106,42 +106,84 @@ export async function startScoreJob(fd: FormData): Promise<{ job_id: string }> {
 
 export function streamScoreJob(
   jobId: string,
-  handlers: {
-    onProgress: (p: ScoreProgress) => void;
-    onResult: (r: ScoreResponse) => void;
-    onError: (message: string) => void;
-  },
-): () => void {
+  onProgress: (p: ScoreProgress) => void,
+): Promise<ScoreResponse> {
   const url = `${baseUrl()}/api/score_events/${encodeURIComponent(jobId)}`;
   const es = new EventSource(url);
 
-  const onProgress = (e: MessageEvent) => {
-    try {
-      const p = JSON.parse(String(e.data)) as ScoreProgress;
-      handlers.onProgress(p);
-    } catch {
-      handlers.onProgress({ step: "progress", message: String(e.data) });
-    }
-  };
-  const onResult = (e: MessageEvent) => {
-    try {
-      const payload = JSON.parse(String(e.data)) as { result?: ScoreResponse };
-      if (payload?.result) handlers.onResult(payload.result);
-      else handlers.onError("Scoring completed but no result was returned.");
-    } catch {
-      handlers.onError("Scoring completed but result could not be parsed.");
-    } finally {
+  return new Promise<ScoreResponse>((resolve, reject) => {
+    let opened = false;
+    let openWatchdog = 0;
+
+    const cleanup = () => {
+      window.clearTimeout(openWatchdog);
+      es.removeEventListener("open", onOpen);
+      es.removeEventListener("progress", onProgressEv);
+      es.removeEventListener("result", onResultEv);
+      es.removeEventListener("joberror", onJobErrEv);
+      es.removeEventListener("error", onTransportErr);
       es.close();
-    }
-  };
-  const onErr = () => {
-    handlers.onError("Lost connection to the scoring stream. Please try again.");
-    es.close();
-  };
+    };
 
-  es.addEventListener("progress", onProgress);
-  es.addEventListener("result", onResult);
-  es.addEventListener("error", onErr);
+    const fail = (msg: string) => {
+      cleanup();
+      reject(new Error(msg));
+    };
 
-  return () => es.close();
+    openWatchdog = window.setTimeout(() => {
+      if (!opened && es.readyState !== EventSource.OPEN) {
+        fail("Could not open live progress stream (SSE). Check your API URL / deployment.");
+      }
+    }, 12_000);
+
+    const onOpen = () => {
+      opened = true;
+    };
+
+    const onProgressEv = (e: MessageEvent) => {
+      try {
+        const p = JSON.parse(String(e.data)) as ScoreProgress;
+        onProgress(p);
+      } catch {
+        onProgress({ step: "progress", message: String(e.data) });
+      }
+    };
+
+    const onResultEv = (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(String(e.data)) as { result?: ScoreResponse };
+        if (!payload?.result) {
+          fail("Scoring completed but no result was returned.");
+          return;
+        }
+        cleanup();
+        resolve(payload.result);
+      } catch {
+        fail("Scoring completed but result could not be parsed.");
+      }
+    };
+
+    const onJobErrEv = (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(String(e.data)) as { message?: string };
+        fail(payload.message || "Scoring failed.");
+      } catch {
+        fail("Scoring failed.");
+      }
+    };
+
+    const onTransportErr = () => {
+      // EventSource emits `error` for both transient reconnect attempts and hard failures.
+      // Only treat as fatal if we've opened and the socket is closed, or if it never opens.
+      if (es.readyState === EventSource.CLOSED) {
+        fail("Lost connection to the scoring stream. Please try again.");
+      }
+    };
+
+    es.addEventListener("open", onOpen);
+    es.addEventListener("progress", onProgressEv);
+    es.addEventListener("result", onResultEv);
+    es.addEventListener("joberror", onJobErrEv);
+    es.addEventListener("error", onTransportErr);
+  });
 }

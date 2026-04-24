@@ -162,7 +162,8 @@ async def score_async_start(
                 {"result": out, "ms": int((time.monotonic() - t0) * 1000)},
             )
         except Exception as exc:  # noqa: BLE001
-            await JOB_MANAGER.append(job.id, "error", {"message": str(exc)[:600]})
+            # Named "joberror" (not "error") so browser EventSource clients don't confuse it with transport errors.
+            await JOB_MANAGER.append(job.id, "joberror", {"message": str(exc)[:600]})
 
     # Fire-and-forget background job
     import asyncio as _asyncio
@@ -182,7 +183,7 @@ async def score_events(job_id: str):
         while True:
             job = await JOB_MANAGER.get(job_id)
             if job is None:
-                yield _sse("error", {"message": "Job not found (expired). Please try again."})
+                yield _sse("joberror", {"message": "Job not found (expired). Please try again."})
                 return
 
             # Stream any new events
@@ -191,7 +192,7 @@ async def score_events(job_id: str):
                 ev = events[last_idx]
                 last_idx += 1
                 yield _sse(ev.type, ev.data)
-                if ev.type in {"result", "error"}:
+                if ev.type in {"result", "joberror"}:
                     return
 
             # Keep-alive
