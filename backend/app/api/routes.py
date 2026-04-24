@@ -200,4 +200,10 @@ async def score_events(job_id: str):
 
     import asyncio
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    headers = {
+        # Help proxies (Render/Cloudflare) stream chunks instead of buffering SSE.
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(gen(), media_type="text/event-stream", headers=headers)

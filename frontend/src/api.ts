@@ -114,6 +114,7 @@ export function streamScoreJob(
   return new Promise<ScoreResponse>((resolve, reject) => {
     let opened = false;
     let openWatchdog = 0;
+    let settled = false;
 
     const cleanup = () => {
       window.clearTimeout(openWatchdog);
@@ -126,8 +127,17 @@ export function streamScoreJob(
     };
 
     const fail = (msg: string) => {
+      if (settled) return;
+      settled = true;
       cleanup();
       reject(new Error(msg));
+    };
+
+    const succeed = (data: ScoreResponse) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(data);
     };
 
     openWatchdog = window.setTimeout(() => {
@@ -156,8 +166,7 @@ export function streamScoreJob(
           fail("Scoring completed but no result was returned.");
           return;
         }
-        cleanup();
-        resolve(payload.result);
+        succeed(payload.result);
       } catch {
         fail("Scoring completed but result could not be parsed.");
       }
@@ -173,6 +182,7 @@ export function streamScoreJob(
     };
 
     const onTransportErr = () => {
+      if (settled) return;
       // EventSource emits `error` for both transient reconnect attempts and hard failures.
       // Only treat as fatal if we've opened and the socket is closed, or if it never opens.
       if (es.readyState === EventSource.CLOSED) {
