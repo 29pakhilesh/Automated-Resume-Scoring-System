@@ -28,9 +28,8 @@ function formatDetail(detail: unknown): string {
 }
 
 function apiBaseHint(): string {
-  if (import.meta.env.VITE_API_BASE)
-    return " Check that VITE_API_BASE matches your live API URL and that the backend is up (e.g. Render free tier may be sleeping).";
-  return " Run the API (e.g. make dev on http://localhost:8000). If you run the UI on another port, either use Vite (make dev-api + make dev-ui) or set VITE_API_BASE=http://localhost:8000.";
+  if (import.meta.env.VITE_API_BASE) return " Check that VITE_API_BASE matches the API URL.";
+  return " Run the API (e.g. make dev on http://localhost:8000). If you run the UI on another port, use the Vite proxy or set VITE_API_BASE=http://localhost:8000.";
 }
 
 async function postScore(url: string, fd: FormData): Promise<Response> {

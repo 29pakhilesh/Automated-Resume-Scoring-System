@@ -1,7 +1,9 @@
+import asyncio
 import logging
 import time
 import json
 
+import anyio
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
@@ -84,7 +86,7 @@ async def score_endpoint(
 
     log.info("score:start filename=%r bytes=%d title=%r", name, len(data), position_title.strip()[:120])
     try:
-        text = extract_resume_text(name, data)
+        text = await anyio.to_thread.run_sync(extract_resume_text, name, data)
     except Exception as exc:  # noqa: BLE001
         log.info("score:extract_failed filename=%r err=%r", name, str(exc)[:200])
         raise HTTPException(status_code=422, detail=f"Could not read resume: {exc}") from exc
@@ -142,7 +144,7 @@ async def score_async_start(
         t0 = time.monotonic()
         try:
             await JOB_MANAGER.append(job.id, "progress", {"step": "extracting_text", "message": "Extracting text", "pct": 18})
-            text = extract_resume_text(name, data)
+            text = await anyio.to_thread.run_sync(extract_resume_text, name, data)
             if not text or len(text.strip()) < 50:
                 raise ValueError(
                     "Very little text extracted. Try another PDF (text-based, not only scanned images) or DOCX."
@@ -166,9 +168,7 @@ async def score_async_start(
             await JOB_MANAGER.append(job.id, "joberror", {"message": str(exc)[:600]})
 
     # Fire-and-forget background job
-    import asyncio as _asyncio
-
-    _asyncio.create_task(_run())
+    asyncio.create_task(_run())
     return {"job_id": job.id}
 
 
@@ -178,6 +178,7 @@ async def score_events(job_id: str):
 
     async def gen():
         last_idx = 0
+        last_keepalive = time.monotonic()
         # Initial ping so EventSource opens reliably behind proxies.
         yield _sse("progress", {"step": "connected", "message": "Connected", "pct": 1})
         while True:
@@ -195,10 +196,14 @@ async def score_events(job_id: str):
                 if ev.type in {"result", "joberror"}:
                     return
 
+            # Keep-alive: SSE comment frames keep intermediaries from closing idle streams.
+            now = time.monotonic()
+            if now - last_keepalive > 12:
+                yield ": ping\n\n"
+                last_keepalive = now
+
             # Keep-alive
             await asyncio.sleep(0.25)
-
-    import asyncio
 
     headers = {
         # Help proxies (Render/Cloudflare) stream chunks instead of buffering SSE.
