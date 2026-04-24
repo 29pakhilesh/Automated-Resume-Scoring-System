@@ -24,6 +24,18 @@ def _tesseract_available() -> bool:
     return which("tesseract") is not None
 
 
+def extract_text_from_image_ocr(data: bytes) -> str:
+    """OCR a single image using Tesseract (best-effort)."""
+    if not _tesseract_available():
+        raise RuntimeError("OCR unavailable (install tesseract)")
+    import pytesseract
+    from PIL import Image
+
+    img = Image.open(BytesIO(data)).convert("RGB")
+    txt = pytesseract.image_to_string(img)
+    return (txt or "").strip()
+
+
 def extract_text_from_pdf_ocr(data: bytes, max_pages: int = 4) -> str:
     """OCR a PDF by rendering pages to images (pdfium) and running Tesseract.
 
@@ -76,4 +88,7 @@ def extract_resume_text(filename: str, data: bytes) -> str:
         return text
     if lower.endswith(".docx"):
         return extract_text_from_docx(data)
-    raise ValueError("Unsupported file type. Use PDF or DOCX.")
+    if lower.endswith((".png", ".jpg", ".jpeg", ".webp")):
+        # Always OCR for image resumes.
+        return extract_text_from_image_ocr(data)
+    raise ValueError("Unsupported file type. Use PDF, DOCX, PNG, JPG, or WEBP.")

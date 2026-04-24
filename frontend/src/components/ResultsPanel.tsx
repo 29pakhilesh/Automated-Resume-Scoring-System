@@ -90,9 +90,10 @@ type Props = {
   error: string | null;
   loading: boolean;
   onViewDetails?: () => void;
+  onOpenSnippet?: (url: string) => void;
 };
 
-export function ResultsPanel({ result, error, loading, onViewDetails }: Props) {
+export function ResultsPanel({ result, error, loading, onViewDetails, onOpenSnippet }: Props) {
   const sub = result?.subscores;
 
   const empty = !loading && !result && !error;
@@ -115,7 +116,7 @@ export function ResultsPanel({ result, error, loading, onViewDetails }: Props) {
           <LineChart className="h-7 w-7 text-ink-950 dark:text-white" aria-hidden />
           Results
         </h2>
-        <p className="mt-2 text-sm text-ink-600 dark:text-ink-400">Format, semantic fit, and keyword coverage—plus actionable notes.</p>
+        <p className="mt-2 text-sm text-ink-600 dark:text-ink-400">Overall score and the three subscores. Open details for full feedback.</p>
       </header>
 
       <AnimatePresence mode="wait">
@@ -131,7 +132,7 @@ export function ResultsPanel({ result, error, loading, onViewDetails }: Props) {
               <Sparkles className="h-8 w-8 text-ink-950 dark:text-white" />
             </div>
             <p className="max-w-xs text-sm leading-relaxed text-ink-600 dark:text-ink-400">
-              Your scores and coaching notes will appear here after you run an analysis.
+              Your scores will appear here after you run an analysis.
             </p>
           </motion.div>
         )}
@@ -193,17 +194,9 @@ export function ResultsPanel({ result, error, loading, onViewDetails }: Props) {
               {(Object.keys(SUB_LABELS) as (keyof Subscores)[]).map((key) => (
                 <SubscoreRow key={key} label={SUB_LABELS[key]} value={sub?.[key]} />
               ))}
-              {(sub?.keyword_coverage_vs_job_description ?? 100) < 24 &&
-                (result.extracted_text_preview?.length ?? 0) < 500 && (
-                  <p className="rounded-xl border border-amber-200/80 bg-amber-50/90 p-3 text-xs leading-relaxed text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-50">
-                    Keyword match looks weak and we only extracted a short text preview from this PDF. That
-                    usually means a scanned or image-based file—try exporting a text-based PDF or DOCX so
-                    skills from the job description can be detected.
-                  </p>
-                )}
             </div>
 
-            <div className="flex justify-center">
+            <div className="flex flex-col items-center justify-center gap-2 sm:flex-row">
               <button
                 type="button"
                 onClick={onViewDetails}
@@ -211,6 +204,24 @@ export function ResultsPanel({ result, error, loading, onViewDetails }: Props) {
               >
                 View full feedback
               </button>
+              {onOpenSnippet &&
+                (() => {
+                  const relAnn = result.annotated_document_preview?.url?.trim();
+                  const rel0 = result.weak_section_snippet?.url?.trim();
+                  const plan = result.improvement_plan ?? [];
+                  const hit = plan.find((p) => p?.snippet_image_url);
+                  const rel = relAnn || rel0 || hit?.snippet_image_url?.trim();
+                  if (!rel) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => onOpenSnippet(rel)}
+                      className="rounded-xl border border-black/10 bg-white/70 px-4 py-2 text-sm font-semibold text-ink-900 shadow-sm transition hover:bg-white dark:border-white/10 dark:bg-white/[0.06] dark:text-ink-100 dark:hover:bg-white/[0.09]"
+                    >
+                      {relAnn ? "Preview document (issues marked)" : "Preview weak section"}
+                    </button>
+                  );
+                })()}
             </div>
           </motion.div>
         )}

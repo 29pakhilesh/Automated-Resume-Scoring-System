@@ -8,6 +8,22 @@ from typing import Any
 from app.embeddings import get_embedding_model
 from app.tokens import important_tokens
 
+EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+PHONE_RE = re.compile(r"(?:(?:\+?\d{1,3}[\s-]?)?(?:\(\d{2,4}\)[\s-]?)?\d{3}[\s-]?\d{3}[\s-]?\d{4})")
+LINK_RE = re.compile(r"(https?://\S+|www\.\S+)", re.IGNORECASE)
+
+
+def _looks_like_contact_or_header(text: str) -> bool:
+    t = text.strip()
+    if not t:
+        return False
+    if EMAIL_RE.search(t) or PHONE_RE.search(t):
+        return True
+    # common resume header/link markers
+    if LINK_RE.search(t) and ("linkedin" in t.lower() or "github" in t.lower()):
+        return True
+    return False
+
 
 def missing_jd_terms(resume_text: str, jd_text: str, limit: int = 35) -> list[str]:
     """Important JD tokens absent from the resume (substring match, lowercase)."""
@@ -64,11 +80,23 @@ def weakest_resume_spans(
         [{"offset": chunks[i][0], "preview": _preview(chunks[i][1]), "cosine": round(float(sims[i]), 4)} for i in range(len(chunks))],
         key=lambda x: x["cosine"],
     )
-    return ranked[:4]
+    # Avoid leaking contact/header info in previews (emails, phone, links).
+    out: list[dict[str, Any]] = []
+    for item in ranked:
+        prev = str(item.get("preview") or "")
+        if _looks_like_contact_or_header(prev):
+            continue
+        out.append(item)
+        if len(out) >= 4:
+            break
+    return out
 
 
 def _preview(text: str, max_len: int = 160) -> str:
     one = re.sub(r"\s+", " ", text).strip()
+    # Redact contact-like strings (extra safety).
+    one = EMAIL_RE.sub("[redacted email]", one)
+    one = PHONE_RE.sub("[redacted phone]", one)
     return one if len(one) <= max_len else one[: max_len - 1] + "…"
 
 

@@ -36,11 +36,15 @@ def build_improvement_plan(
             {
                 "area": "semantic_fit_vs_job_description",
                 "severity": "high" if sem < 48 else "medium",
-                "why": (
-                    "One section of the resume reads less aligned to the job description than the rest. "
-                    f"Preview: {w0.get('preview')}"
-                ),
+                "why": "One section of the resume reads less aligned to the job description than the rest.",
                 "fix": "Rewrite that section with responsibilities and outcomes that mirror the JD’s language and scope.",
+                # UI can render a PDF band image if the original upload was a PDF (see scoring_service).
+                "snippet": {
+                    "kind": "resume_pdf_band",
+                    "offset": w0.get("offset"),
+                    "cosine": w0.get("cosine"),
+                    "text_preview": w0.get("preview"),
+                },
             }
         )
 

@@ -13,7 +13,24 @@ import { applyTheme, getInitialTheme, type Theme } from "@/theme";
 import logoPng from "@/assets/logo.jpeg";
 
 const HERO_WORDS = ["measurable", "ATS-ready", "aligned", "compelling", "job-fit"];
-const STORAGE_KEY = "rss.lastScoreResponse.v1";
+const STORAGE_KEY = "rss.lastScoreResponse.v3";
+
+function apiBaseUrl() {
+  return (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+}
+
+function absSnippetUrl(pathOrUrl: string) {
+  let p = pathOrUrl.trim();
+  if (!p) return "";
+  if (p.startsWith("http://") || p.startsWith("https://") || p.startsWith("data:")) return p;
+  // Legacy responses used "/snippet/..." before the API router prefix was "/api".
+  if (p === "/snippet" || p.startsWith("/snippet/")) {
+    p = `/api${p}`;
+  }
+  const base = apiBaseUrl();
+  if (!base) return p;
+  return `${base}${p.startsWith("/") ? "" : "/"}${p}`;
+}
 
 export default function App() {
   const [positionTitle, setPositionTitle] = useState("");
@@ -27,6 +44,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<{ pct?: number; message?: string; step?: string } | null>(null);
+  const [snippetUrl, setSnippetUrl] = useState<string | null>(null);
 
   const resultsAnchor = useRef<HTMLDivElement>(null);
   const scoreSectionRef = useRef<HTMLDivElement>(null);
@@ -152,6 +170,10 @@ export default function App() {
     window.open("/details", "_blank", "noopener,noreferrer");
   }, []);
 
+  const openSnippet = useCallback((rel: string) => {
+    setSnippetUrl(absSnippetUrl(rel));
+  }, []);
+
   if (isDetails) {
     return (
       <div className="min-h-screen text-ink-900 dark:text-ink-100">
@@ -164,6 +186,36 @@ export default function App() {
   return (
     <div className="min-h-screen text-ink-900 dark:text-ink-100">
       <MeshBackground />
+
+      {snippetUrl && (
+        <div
+          className="fixed inset-0 z-[250] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Resume snippet preview"
+          onClick={() => setSnippetUrl(null)}
+        >
+          <div
+            className="relative w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-ink-950 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSnippetUrl(null)}
+              className="absolute right-3 top-3 z-10 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs font-semibold text-white hover:bg-black/55"
+            >
+              Close
+            </button>
+            <div className="max-h-[85vh] overflow-auto p-4 sm:p-6">
+              <img src={snippetUrl} alt="Resume snippet preview" className="h-auto w-full select-none" />
+              <p className="mt-3 text-xs text-white/70">
+                When the backend can render your file, this is the full stacked-page preview with highlighted weak
+                job-description alignment regions (approximate, from extracted text—not exact PDF text boxes).
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AnimatePresence>
         {showSplash && (
@@ -380,7 +432,13 @@ export default function App() {
                     />
                   </motion.div>
                   <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
-                    <ResultsPanel result={result} error={error} loading={loading} onViewDetails={openDetails} />
+                    <ResultsPanel
+                      result={result}
+                      error={error}
+                      loading={loading}
+                      onViewDetails={openDetails}
+                      onOpenSnippet={openSnippet}
+                    />
                   </motion.div>
                 </motion.div>
               </motion.div>

@@ -12,6 +12,12 @@ from app.db.crud import save_scoring_run
 from app.db.session import get_session_factory
 from app.scoring import score_resume
 from app.scoring_privacy import scoring_run_payload_for_db
+from app.snippet_image import (
+    render_file_annotated_preview_png,
+    render_file_snippet_png,
+    render_text_highlight_preview_png,
+)
+from app.snippet_store import SNIPPET_STORE
 
 
 async def score_resume_pipeline(
@@ -20,6 +26,7 @@ async def score_resume_pipeline(
     job_description: str,
     position_title: str,
     filename: str,
+    resume_pdf_bytes: bytes | None = None,
     extracted_preview_len: int = 800,
 ) -> dict[str, Any]:
     """
@@ -37,6 +44,155 @@ async def score_resume_pipeline(
     result["extracted_text_preview"] = preview[:extracted_preview_len] + (
         "…" if len(preview) > extracted_preview_len else ""
     )
+
+    def _y_ratio_for_chunk(*, resume: str, offset: int, chunk_text: str | None) -> float:
+        n = max(1, len(resume))
+        start = int(offset) if offset is not None else 0
+        start = max(0, min(n - 1, start))
+        if chunk_text:
+            needle = chunk_text.strip()
+            if len(needle) >= 24:
+                at = resume.find(needle)
+                if at != -1:
+                    start = at
+        # bias slightly downward so headings aren't always centered awkwardly
+        center = start + min(220, max(40, n // 18))
+        return min(0.92, max(0.08, center / n))
+
+    # Best-effort: preview images (always attempt when bytes are available).
+    if resume_pdf_bytes:
+        plan = result.get("improvement_plan") or []
+        gap = result.get("gap_report") or {}
+        weak = [w for w in (gap.get("weakest_resume_segments_vs_jd") or []) if isinstance(w, dict)]
+        w0 = weak[0] if weak else None
+
+        shared_url: str | None = None
+        try:
+            ann_png = await anyio.to_thread.run_sync(
+                render_file_annotated_preview_png,
+                filename,
+                resume_pdf_bytes,
+                resume_text=preview,
+                weak_segments=weak,
+            )
+            token = SNIPPET_STORE.put(ann_png)
+            shared_url = f"/api/snippet/{token}.png"
+            result["annotated_document_preview"] = {
+                "mime": "image/png",
+                "url": shared_url,
+                "marked_regions": len(weak),
+            }
+        except Exception:
+            # Hard fallback: generate a text-based PNG so the UI always has *some* preview.
+            try:
+                fallback = await anyio.to_thread.run_sync(
+                    render_text_highlight_preview_png,
+                    resume_text=preview,
+                    weak_segments=weak,
+                )
+                token = SNIPPET_STORE.put(fallback)
+                shared_url = f"/api/snippet/{token}.png"
+                result["annotated_document_preview"] = {
+                    "mime": "image/png",
+                    "url": shared_url,
+                    "marked_regions": len(weak),
+                }
+            except Exception:
+                result.pop("annotated_document_preview", None)
+
+        if shared_url:
+            ws: dict[str, Any] = {"mime": "image/png", "url": shared_url}
+            if w0:
+                ws["offset"] = w0.get("offset")
+                ws["cosine"] = w0.get("cosine")
+            result["weak_section_snippet"] = ws
+
+            for item in plan:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("area") != "semantic_fit_vs_job_description":
+                    continue
+                sn = item.get("snippet") or {}
+                if not isinstance(sn, dict) or sn.get("kind") != "resume_pdf_band":
+                    continue
+                item["snippet_image_mime"] = "image/png"
+                item["snippet_image_url"] = shared_url
+                item["snippet_full_document_preview"] = True
+                item.pop("snippet_image_base64", None)
+        else:
+            # Fallback: vertical band on first page only.
+            if w0:
+                off = w0.get("offset")
+                try:
+                    off_i = int(off) if off is not None else 0
+                except Exception:  # noqa: BLE001
+                    off_i = 0
+                chunk_txt = w0.get("preview")
+                chunk_txt_s = str(chunk_txt) if chunk_txt is not None else ""
+                y_ratio = _y_ratio_for_chunk(resume=preview, offset=off_i, chunk_text=chunk_txt_s)
+                try:
+                    png = await anyio.to_thread.run_sync(
+                        render_file_snippet_png,
+                        filename,
+                        resume_pdf_bytes,
+                        y_center_ratio=y_ratio,
+                    )
+                    token = SNIPPET_STORE.put(png)
+                    result["weak_section_snippet"] = {
+                        "mime": "image/png",
+                        "url": f"/api/snippet/{token}.png",
+                        "offset": w0.get("offset"),
+                        "cosine": w0.get("cosine"),
+                    }
+                except Exception:
+                    # Final fallback: text-based PNG
+                    try:
+                        fallback = await anyio.to_thread.run_sync(
+                            render_text_highlight_preview_png,
+                            resume_text=preview,
+                            weak_segments=weak,
+                        )
+                        token = SNIPPET_STORE.put(fallback)
+                        result["weak_section_snippet"] = {
+                            "mime": "image/png",
+                            "url": f"/api/snippet/{token}.png",
+                            "offset": w0.get("offset") if w0 else None,
+                            "cosine": w0.get("cosine") if w0 else None,
+                        }
+                    except Exception:
+                        result.pop("weak_section_snippet", None)
+
+            for item in plan:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("area") != "semantic_fit_vs_job_description":
+                    continue
+                sn = item.get("snippet") or {}
+                if not isinstance(sn, dict) or sn.get("kind") != "resume_pdf_band":
+                    continue
+                off = sn.get("offset")
+                try:
+                    off_i = int(off) if off is not None else 0
+                except Exception:  # noqa: BLE001
+                    off_i = 0
+                chunk_txt = sn.get("text_preview")
+                chunk_txt_s = str(chunk_txt) if chunk_txt is not None else ""
+                y_ratio = _y_ratio_for_chunk(resume=preview, offset=off_i, chunk_text=chunk_txt_s)
+                try:
+                    png = await anyio.to_thread.run_sync(
+                        render_file_snippet_png,
+                        filename,
+                        resume_pdf_bytes,
+                        y_center_ratio=y_ratio,
+                    )
+                    token = SNIPPET_STORE.put(png)
+                    item["snippet_image_mime"] = "image/png"
+                    item["snippet_image_url"] = f"/api/snippet/{token}.png"
+                    item.pop("snippet_image_base64", None)
+                except Exception:
+                    item.pop("snippet_image_mime", None)
+                    item.pop("snippet_image_base64", None)
+                    item.pop("snippet_image_url", None)
 
     coach_ctx: dict[str, Any] = {
         "overall_score": result.get("overall_score"),

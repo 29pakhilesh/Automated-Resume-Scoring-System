@@ -101,6 +101,13 @@ build: $(FRONTEND_VITE)
 # --- Run (cwd must be $(BACKEND) so package app is importable as app) ---
 
 dev dev-api backend frontend run: $(UVICORN)
+	@# Open browser once the API is reachable (macOS `open`).
+	@( \
+		if command -v open >/dev/null 2>&1; then \
+			until curl -fsS "http://$(HOST):$(PORT)/api/health" >/dev/null 2>&1; do sleep 0.2; done; \
+			open "http://$(HOST):$(PORT)/" >/dev/null 2>&1 || true; \
+		fi \
+	) &
 	cd $(BACKEND) && $(UVICORN_ABS) app.main:app --reload --host $(HOST) --port $(PORT)
 
 dev-ui: $(FRONTEND_VITE)

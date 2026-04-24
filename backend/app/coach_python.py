@@ -55,7 +55,7 @@ def build_python_coach(context: dict[str, Any]) -> dict[str, str]:
         lines.append("")
         lines.append("Resume segments that looked least aligned to the JD under embeddings (rewrite these first):")
         for w in weakest[:3]:
-            lines.append(f"- cosine≈{w.get('cosine')} @ offset {w.get('offset')}: {w.get('preview')}")
+            lines.append(f"- cosine≈{w.get('cosine')} @ offset {w.get('offset')}")
 
     lines.append("")
     lines.append(

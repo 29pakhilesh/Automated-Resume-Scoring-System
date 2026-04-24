@@ -5,7 +5,7 @@ import json
 
 import anyio
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from app.dataset import load_job_archetypes
 from app.db.queries import list_recent_runs
@@ -13,6 +13,7 @@ from app.db.session import get_session_factory
 from app.parsers import extract_resume_text
 from app.services.scoring_jobs import JOB_MANAGER
 from app.services.scoring_service import score_resume_pipeline
+from app.snippet_store import SNIPPET_STORE
 
 router = APIRouter(prefix="/api")
 
@@ -26,7 +27,34 @@ def _sse(event: str, data: dict) -> str:
 
 @router.get("/health")
 def health() -> dict:
-    return {"status": "ok", "version": "0.4.0", "backend": "python"}
+    from app.config import get_settings
+
+    s = get_settings()
+    return {
+        "status": "ok",
+        "version": "0.4.0",
+        "backend": "python",
+        "scoring_weights": {
+            "format": s.scoring_weight_format,
+            "semantic": s.scoring_weight_semantic,
+            "keywords": s.scoring_weight_keywords,
+        },
+    }
+
+
+@router.get("/snippet/{token}.png")
+def snippet_png(token: str) -> Response:
+    """Serve a short-lived snippet PNG generated during scoring."""
+    # tolerate callers appending .png twice
+    tok = token.removesuffix(".png")
+    png = SNIPPET_STORE.get(tok)
+    if not png:
+        raise HTTPException(status_code=404, detail="Snippet not found (expired) or invalid token")
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get("/archetypes")
@@ -77,8 +105,10 @@ async def score_endpoint(
         )
 
     name = file.filename or ""
-    if not (name.lower().endswith(".pdf") or name.lower().endswith(".docx")):
-        raise HTTPException(status_code=400, detail="Upload a PDF or DOCX file")
+    if not (
+        name.lower().endswith((".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp"))
+    ):
+        raise HTTPException(status_code=400, detail="Upload a PDF, DOCX, PNG, JPG, or WEBP file")
 
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
@@ -104,6 +134,7 @@ async def score_endpoint(
             job_description=job_description,
             position_title=position_title,
             filename=name,
+            resume_pdf_bytes=data,
         )
         return out
     finally:
@@ -130,8 +161,10 @@ async def score_async_start(
         )
 
     name = file.filename or ""
-    if not (name.lower().endswith(".pdf") or name.lower().endswith(".docx")):
-        raise HTTPException(status_code=400, detail="Upload a PDF or DOCX file")
+    if not (
+        name.lower().endswith((".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp"))
+    ):
+        raise HTTPException(status_code=400, detail="Upload a PDF, DOCX, PNG, JPG, or WEBP file")
 
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
@@ -156,6 +189,7 @@ async def score_async_start(
                 job_description=job_description,
                 position_title=position_title,
                 filename=name,
+                resume_pdf_bytes=data,
             )
             await JOB_MANAGER.append(job.id, "progress", {"step": "finalizing", "message": "Finalizing results", "pct": 95})
             await JOB_MANAGER.append(

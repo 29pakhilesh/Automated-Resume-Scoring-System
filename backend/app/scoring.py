@@ -210,8 +210,12 @@ def score_resume(
     weights: ScoreWeights | None = None,
 ) -> dict:
     """Full scoring payload for API response."""
-    w = weights or ScoreWeights()
     settings = get_settings()
+    w = weights or ScoreWeights(
+        format=settings.scoring_weight_format,
+        semantic=settings.scoring_weight_semantic,
+        keywords=settings.scoring_weight_keywords,
+    )
 
     jd_combined = f"{position_title.strip()}\n\n{job_description.strip()}".strip()
     jd_body = job_description.strip()
@@ -267,6 +271,15 @@ def score_resume(
         gap_report=gap_report,
         format_hints=format_hints,
     )
+
+    # Never expose internal reference/template metadata to clients.
+    fmt_detail = dict(fmt_detail or {})
+    for k in ["reference_resume_bundled", "reference_template_description", "reference_file_present"]:
+        fmt_detail.pop(k, None)
+    # Remove any future "reference_*" keys defensively.
+    for k in list(fmt_detail.keys()):
+        if str(k).lower().startswith("reference_"):
+            fmt_detail.pop(k, None)
 
     return {
         "overall_score": overall,
