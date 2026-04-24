@@ -8,13 +8,13 @@
   </p>
 
   <p>
-    <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" />
-    <img alt="React" src="https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=0B1020" />
-    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" />
-    <img alt="Vite" src="https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white" />
-    <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white" />
-    <img alt="SQLite" src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white" />
-    <img alt="Sentence Transformers" src="https://img.shields.io/badge/Sentence_Transformers-111827?logo=python&logoColor=white" />
+    <img height="32" alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" />
+    <img height="32" alt="React" src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=0B1020" />
+    <img height="32" alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+    <img height="32" alt="Vite" src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" />
+    <img height="32" alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" />
+    <img height="32" alt="SQLite" src="https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white" />
+    <img height="32" alt="Sentence Transformers" src="https://img.shields.io/badge/Sentence_Transformers-111827?style=for-the-badge&logo=python&logoColor=white" />
   </p>
 </div>
 
@@ -34,53 +34,17 @@ Resume Scoring System scores a resume against a specific job description, not ag
 | Privacy controls | In-memory uploads by default, with optional run persistence |
 | Benchmarks | Hugging Face and Kaggle dataset scripts for regression checks |
 
-## Dataset Icons
+## Datasets And Artifacts
 
 These are the data sources and artifacts used by the project for presets, benchmarking, and local learned scoring assets.
 
-<table>
-  <tr>
-    <td width="130" align="center"><strong>HF</strong><br />Hugging Face</td>
-    <td>
-      <strong><code>0xnbk/resume-ats-score-v1-en</code></strong><br />
-      Optional resume ATS benchmark with <code>text</code>, <code>ats_score</code>, and
-      <code>original_label</code> columns.<br />
-      <sub>Helper: <code>backend/app/dataset_hf.py</code></sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="130" align="center"><strong>KG</strong><br />Kaggle</td>
-    <td>
-      <strong><code>mohamedramadan2040/jobsphere-ats-resume-scoring</code></strong><br />
-      Optional DOCX/PDF resume corpus for smoke and score distribution checks.<br />
-      <sub>Helper: <code>backend/app/dataset_kaggle.py</code></sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="130" align="center"><strong>JSONL</strong><br />JD Presets</td>
-    <td>
-      <strong><code>jd_archetypes.jsonl</code></strong><br />
-      Local job-description presets shown in the UI.<br />
-      <sub>Data: <code>backend/data/jd_archetypes.jsonl</code></sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="130" align="center"><strong>DOCX</strong><br />Reference</td>
-    <td>
-      <strong><code>reference_resume.docx</code></strong><br />
-      Local reference resume artifact for formatting and parsing experiments.<br />
-      <sub>Data: <code>backend/data/reference_resume.docx</code></sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="130" align="center"><strong>PKL</strong><br />Joblib</td>
-    <td>
-      <strong><code>learned_overall.joblib</code> + metadata</strong><br />
-      Local learned overall-score calibration artifact.<br />
-      <sub>Data: <code>backend/data/learned_overall.joblib</code></sub>
-    </td>
-  </tr>
-</table>
+| Dataset / Artifact | Source | Used for | Project file |
+|---|---|---|---|
+| `0xnbk/resume-ats-score-v1-en` | Hugging Face | Optional resume ATS benchmark with `text`, `ats_score`, and `original_label` columns | `backend/app/dataset_hf.py` |
+| `mohamedramadan2040/jobsphere-ats-resume-scoring` | Kaggle | Optional DOCX/PDF resume corpus for smoke and score distribution checks | `backend/app/dataset_kaggle.py` |
+| `jd_archetypes.jsonl` | Local JSONL | Job-description presets shown in the UI | `backend/data/jd_archetypes.jsonl` |
+| `reference_resume.docx` | Local DOCX | Reference resume artifact for formatting and parsing experiments | `backend/data/reference_resume.docx` |
+| `learned_overall.joblib` + metadata | Local Joblib | Learned overall-score calibration artifact | `backend/data/learned_overall.joblib` |
 
 ## How Scoring Works
 
@@ -101,9 +65,11 @@ Weighted score blend + weak-section analysis + explanation payload
 
 Default blend:
 
-```text
-overall = (0.18 * format + 0.50 * semantic + 0.32 * keywords) / (0.18 + 0.50 + 0.32)
-```
+$$
+\text{Overall}
+= \frac{0.18 \cdot \text{Format} + 0.50 \cdot \text{Semantic} + 0.32 \cdot \text{Keywords}}
+{0.18 + 0.50 + 0.32}
+$$
 
 The score channels are:
 
@@ -125,9 +91,11 @@ K = keyword_score
 
 The final score is a weighted mean:
 
-```text
-overall_score = (wf * F + ws * S + wk * K) / (wf + ws + wk)
-```
+$$
+\text{Score}
+= \frac{w_f \cdot F + w_s \cdot S + w_k \cdot K}
+{w_f + w_s + w_k}
+$$
 
 Default weights:
 
@@ -139,22 +107,33 @@ wk = 0.32
 
 So the default calculation is:
 
-```text
-overall_score = (0.18 * F + 0.50 * S + 0.32 * K) / 1.00
-```
+$$
+\text{Score}
+= \frac{0.18 \cdot F + 0.50 \cdot S + 0.32 \cdot K}{1.00}
+$$
 
 Core similarity signals use standard normalized matching ideas:
 
-```text
-cosine_similarity(A, B) = (A . B) / (||A|| * ||B||)
-keyword_coverage      = matched_important_terms / total_important_terms
-```
+$$
+\text{CosineSimilarity}(A, B)
+= \frac{A \cdot B}{\lVert A \rVert \cdot \lVert B \rVert}
+$$
+
+$$
+\text{KeywordCoverage}
+= \frac{\text{Matched Important Terms}}{\text{Total Important Terms}}
+$$
 
 BM25-style lexical relevance follows the usual term-frequency saturation pattern:
 
-```text
-BM25(q, d) = sum IDF(t) * ((tf(t,d) * (k1 + 1)) / (tf(t,d) + k1 * (1 - b + b * |d| / avgdl)))
-```
+$$
+\text{BM25}(q, d)
+= \sum_{t \in q}
+\text{IDF}(t)
+\cdot
+\frac{\text{tf}(t,d)(k_1 + 1)}
+{\text{tf}(t,d) + k_1 \left(1 - b + b \cdot \frac{|d|}{\text{avgdl}}\right)}
+$$
 
 These raw signals are clipped and normalized before they are exposed as the 0-100 score channels.
 
