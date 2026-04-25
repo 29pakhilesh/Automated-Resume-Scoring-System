@@ -50,17 +50,28 @@ These are the data sources and artifacts used by the project for presets, benchm
 
 The backend extracts resume text, computes multiple matching signals, and returns a normalized 0-100 score.
 
-```text
-Resume upload + Job description
-          |
-          v
-Text extraction / OCR fallback
-          |
-          v
-Format heuristics + semantic embeddings + keyword/BM25 signals
-          |
-          v
-Weighted score blend + weak-section analysis + explanation payload
+```mermaid
+flowchart TD
+    A([Resume upload + job description])
+    B[Text extraction]
+    C{Readable text?}
+    D[OCR fallback]
+    E[Signal generation]
+    F[Weighted score blend]
+    G([Score, weak sections, and explanation payload])
+
+    A --> B
+    B --> C
+    C -- Yes --> E
+    C -- No --> D
+    D --> E
+    E --> H[Format heuristics]
+    E --> I[Semantic embeddings]
+    E --> J[Keyword and BM25 signals]
+    H --> F
+    I --> F
+    J --> F
+    F --> G
 ```
 
 Default blend:
