@@ -344,4 +344,4 @@ make clean
 
 ## Why Scores Can Surprise You
 
-A strong resume can still score low if it does not match the specific job description. This is intentional. The app rewards evidence that the resume mirrors the target role: relevant tools, domains, responsibilities, seniority signals, and outcomes. Use the weak-section output as the first rewrite queue.
+A strong resume can still score low if it does not match the specific job description. This is intentional. The app rewards evidence that the resume mirrors the target role: relevant tools, domains, responsibilities, seniority signals, and outcomes. Use the weak-section outputs as the first rewrite queue.
